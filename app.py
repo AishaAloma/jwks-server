@@ -1,4 +1,5 @@
-"""JWKS server: serves public keys and issues signed JWTs."""
+
+"""SQLite-backed JWKS server that issues signed JWTs."""
 
 import time
 
@@ -14,20 +15,27 @@ store = KeyStore()
 
 @app.route("/.well-known/jwks.json", methods=["GET"])
 def jwks():
-    keys = [k.to_jwk() for k in store.unexpired_keys()]
+    """Return public keys that have not expired."""
+    keys = [key.to_jwk() for key in store.unexpired_keys()]
     return jsonify({"keys": keys}), 200
 
 
-@app.route("/.well-known/jwks.json", methods=["POST", "PUT", "DELETE", "PATCH"])
+@app.route(
+    "/.well-known/jwks.json",
+    methods=["POST", "PUT", "DELETE", "PATCH"],
+)
 def jwks_method_not_allowed():
+    """Reject unsupported methods on the JWKS endpoint."""
     return jsonify({"error": "method not allowed"}), 405
 
 
 @app.route("/auth", methods=["POST"])
 def auth():
+    """Issue a JWT signed with a database-backed private key."""
     use_expired = "expired" in request.args
-
     key = store.expired_key if use_expired else store.valid_key
+
+    # An expired key must produce an expired JWT for the assignment.
     exp = key.expiry if use_expired else int(time.time()) + 3600
 
     private_pem = key.private_key.private_bytes(
@@ -41,11 +49,12 @@ def auth():
         "iat": int(time.time()),
         "exp": exp,
     }
+
     token = jwt.encode(
         payload,
         private_pem,
         algorithm="RS256",
-        headers={"kid": key.kid},
+        headers={"kid": str(key.kid)},
     )
 
     return token, 200, {"Content-Type": "text/plain"}
@@ -53,6 +62,7 @@ def auth():
 
 @app.route("/auth", methods=["GET", "PUT", "DELETE", "PATCH"])
 def auth_method_not_allowed():
+    """Reject unsupported methods on the authentication endpoint."""
     return jsonify({"error": "method not allowed"}), 405
 
 
