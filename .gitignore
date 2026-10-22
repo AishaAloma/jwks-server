@@ -6,3 +6,4 @@ htmlcov/
 venv/
 .venv/
 gradebot
+totally_not_my_privateKeys.db
